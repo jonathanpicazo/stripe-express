@@ -1,11 +1,12 @@
-import fetch from "node-fetch";
 import dotenv from "dotenv";
+import axios from "axios";
+
 dotenv.config();
 export const fetchAdmin = async (query: string, variables?: any) => {
   try {
     const shopName = process.env.SHOPIFY_STORE as string;
     const adminToken = process.env.SHOPIFY_ADMIN_TOKEN as string;
-    const url = new URL(`https://${shopName}/api/2021-07/graphql`);
+    const url = `https://${shopName}/api/2022-10/graphql`;
     const options = {
       method: "POST",
       headers: {
@@ -15,9 +16,11 @@ export const fetchAdmin = async (query: string, variables?: any) => {
       },
       body: JSON.stringify({ query, variables }),
     };
-    const res = await fetch(url, options);
-    const resJson = await res.json();
-    return resJson.data;
+    const res = await axios(url, options);
+    console.log(res);
+    return res;
+    // const resJson = await res.json();
+    // return resJson.data;
   } catch (error) {
     console.log("error while fetching products", error);
   }

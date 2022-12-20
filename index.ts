@@ -58,6 +58,7 @@ app.post("/payment-sheet", async (req, res) => {
   );
   try {
     // const pendingOrderId = await createDraftOrder();
+    console.log("connected to app");
     const paymentIntent = await stripe.paymentIntents.create({
       amount: 1099,
       currency: "usd",
@@ -66,10 +67,6 @@ app.post("/payment-sheet", async (req, res) => {
         enabled: true,
       },
     });
-    console.log("Payment successful");
-    // complete draft order
-    // const orderId = await completeDraftOrder(pendingOrderId);
-    // console.log("order complete!, order id is", orderId);
     res.json({
       paymentIntent: paymentIntent.client_secret,
       ephemeralKey: ephemeralKey.secret,
@@ -103,7 +100,6 @@ app.post(
     if (endpointSecret) {
       // Get the signature sent by Stripe
       const signature = request.headers["stripe-signature"] as string;
-      console.log("signature", signature);
       try {
         event = stripe.webhooks.constructEvent(
           request.body,
@@ -131,6 +127,11 @@ app.post(
         // Then define and call a method to handle the successful attachment of a PaymentMethod.
         // handlePaymentMethodAttached(paymentMethod);
         break;
+      case "charge.succeeded":
+        createDraftOrder();
+        break;
+      // create draft Order and complete it
+
       default:
         // Unexpected event type
         console.log(`Unhandled event type ${event.type}.`);
