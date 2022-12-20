@@ -1,0 +1,1 @@
+export { fetchAdmin } from "./fetchAdmin";
