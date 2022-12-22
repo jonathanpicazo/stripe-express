@@ -19,10 +19,23 @@ const stripe = new Stripe(stripeSecret as string, {
   typescript: true,
 });
 
+const calculateTotal = (lineItems: any[]) => {
+  let totalAmt = 0.0;
+  const totalArr = lineItems.map((el) => {
+    totalAmt +=
+      parseFloat(el.shopifyVariant.priceV2.amount) * parseFloat(el.quantity);
+    return { variantId: el.shopifyVariant.id, quantity: el.quantity };
+  });
+  totalAmt *= 100;
+  return { totalAmt, totalArr };
+};
+
 const createDraftOrder = async () => {
   try {
-    const input = { draftCreateVariables };
-    const res = await fetchAdmin(draftOrderCreate, input);
+    let newDraftInput = draftCreateVariables;
+    draftCreateVariables["lineItems"] = app.locals.lineItems;
+    const payload = { input: newDraftInput };
+    const res = await fetchAdmin(draftOrderCreate, payload);
     console.log("createDraftOrder res", res);
     return res.draftOrderCreate.draftOrder.id;
   } catch (error) {
@@ -44,49 +57,60 @@ const completeDraftOrder = async (id: string) => {
   }
 };
 
+const handleDraftOrder = async () => {
+  const draftId = await createDraftOrder();
+  const orderId = await completeDraftOrder(draftId);
+  return orderId;
+};
+
 app.get("/", (req: Request, res: Response) => {
   res.send("Express + TypeScript Server");
 });
 
 // payment sheet connecting to expo app
-app.post("/payment-sheet", async (req, res) => {
-  // Use an existing Customer ID if this is a returning customer.
-  const customer = await stripe.customers.create();
-  const ephemeralKey = await stripe.ephemeralKeys.create(
-    { customer: customer.id },
-    { apiVersion: "2022-11-15" }
-  );
-  try {
-    // const pendingOrderId = await createDraftOrder();
-    console.log("connected to app");
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: 1099,
-      currency: "usd",
-      customer: customer.id,
-      automatic_payment_methods: {
-        enabled: true,
-      },
-    });
-    res.json({
-      paymentIntent: paymentIntent.client_secret,
-      ephemeralKey: ephemeralKey.secret,
-      customer: customer.id,
-      publishableKey: publishableKey,
-    });
-  } catch (e: any) {
-    switch (e.type) {
-      case "StripeCardError":
-        console.log(`A payment error occurred: ${e.message}`);
-        break;
-      case "StripeInvalidRequestError":
-        console.log("An invalid request occurred.");
-        break;
-      default:
-        console.log("Another problem occurred, maybe unrelated to Stripe.");
-        break;
+app.post(
+  "/payment-sheet",
+  express.json(),
+  async (req: Request, res: Response) => {
+    // Use an existing Customer ID if this is a returning customer.
+    const customer = await stripe.customers.create();
+    const ephemeralKey = await stripe.ephemeralKeys.create(
+      { customer: customer.id },
+      { apiVersion: "2022-11-15" }
+    );
+    try {
+      console.log("connected to app");
+      const { totalAmt, totalArr } = calculateTotal(req.body.lineItems);
+      app.locals.lineItems = totalArr;
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: totalAmt,
+        currency: "usd",
+        customer: customer.id,
+        automatic_payment_methods: {
+          enabled: true,
+        },
+      });
+      res.json({
+        paymentIntent: paymentIntent.client_secret,
+        ephemeralKey: ephemeralKey.secret,
+        customer: customer.id,
+        publishableKey: publishableKey,
+      });
+    } catch (e: any) {
+      switch (e.type) {
+        case "StripeCardError":
+          console.log(`A payment error occurred: ${e.message}`);
+          break;
+        case "StripeInvalidRequestError":
+          console.log("An invalid request occurred.");
+          break;
+        default:
+          console.log("Another problem occurred, maybe unrelated to Stripe.");
+          break;
+      }
     }
   }
-});
+);
 
 app.post(
   "/webhook",
@@ -128,7 +152,7 @@ app.post(
         // handlePaymentMethodAttached(paymentMethod);
         break;
       case "charge.succeeded":
-        createDraftOrder();
+        handleDraftOrder();
         break;
       // create draft Order and complete it
 
